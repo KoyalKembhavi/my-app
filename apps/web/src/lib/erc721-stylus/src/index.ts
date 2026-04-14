@@ -30,6 +30,7 @@ export {
   FACTORY_ADDRESSES,
   ERC721_ABI,
   NFT_FACTORY_ABI,
+  WORK_PROOF_ABI,
   type SupportedNetwork,
 } from './constants';
 
@@ -42,6 +43,11 @@ export type {
   AsyncState,
   UseERC721InteractionsOptions,
   UseERC721InteractionsReturn,
+  // Work Proof types
+  WorkProofInfo,
+  FreelancerReputation,
+  MintWorkProofParams,
+  UpdateWorkProofParams,
 } from './types';
 
 // Interaction functions
@@ -59,6 +65,15 @@ export {
   pause,
   unpause,
   transferOwnership,
+  // Work Proof functions
+  mintWorkProof,
+  getFreelancerTokens,
+  getFreelancerTokenCount,
+  getWorkProofInfo,
+  getAverageRating,
+  getTotalWorkProofs,
+  getFreelancerReputation,
+  updateWorkProof,
 } from './interactions';
 
 // React Hooks
@@ -69,5 +84,10 @@ export {
 // Interaction Panel Component
 export { ERC721InteractionPanel } from './ERC721InteractionPanel';
 
+// Work Proof Components
+export { WorkProofMintPanel } from './WorkProofMintPanel';
+export { FreelancerReputationPanel } from './FreelancerReputationPanel';
+
 // Utilities
 export { cn } from './cn';
+export { getWorkProofContractAddress } from './workProofEnv';

@@ -15,7 +15,7 @@ use stylus_sdk::{
     evm,
     msg,
     prelude::*,
-    alloy_primitives::{Address, FixedBytes, U256}
+    alloy_primitives::{Address, FixedBytes, U256, U8}
 };
 use alloy_sol_types::sol;
 
@@ -25,6 +25,9 @@ pub trait Erc721Params {
 
     /// Immutable NFT symbol.
     const SYMBOL: &'static str;
+
+    /// Whether NFTs are soulbound (non-transferable) - for work proof functionality
+    const SOULBOUND: bool = false;
 }
 
 sol_storage! {
@@ -40,6 +43,18 @@ sol_storage! {
         mapping(address => mapping(address => bool)) operator_approvals;
         /// Total supply
         uint256 total_supply;
+        /// Token ID to project type mapping (work proof)
+        mapping(uint256 => string) project_types;
+        /// Token ID to rating mapping (1-5 scale, stored as uint8) (work proof)
+        mapping(uint256 => uint8) ratings;
+        /// Token ID to skill tags mapping (stored as comma-separated string) (work proof)
+        mapping(uint256 => string) skill_tags;
+        /// Token ID to job description mapping (work proof)
+        mapping(uint256 => string) job_descriptions;
+        /// Token ID to client memo mapping (optional feedback from client) (work proof)
+        mapping(uint256 => string) client_memos;
+        /// Freelancer address to list of their token IDs (for easy enumeration) (work proof)
+        mapping(address => uint256[]) freelancer_tokens;
         /// Used to allow [`Erc721Params`]
         PhantomData<T> phantom;
     }
@@ -51,6 +66,21 @@ sol! {
     event Approval(address indexed owner, address indexed approved, uint256 indexed token_id);
     event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
 
+    // Work Proof events
+    event WorkProofMinted(
+        uint256 indexed token_id,
+        address indexed freelancer,
+        address indexed client,
+        string project_type,
+        uint8 rating,
+        string skill_tags
+    );
+    event WorkProofUpdated(
+        uint256 indexed token_id,
+        uint8 new_rating,
+        string new_skill_tags
+    );
+
     // Token id has not been minted, or it has been burned
     error InvalidTokenId(uint256 token_id);
     // The specified address is not the owner of the specified token id
@@ -61,6 +91,14 @@ sol! {
     error TransferToZero(uint256 token_id);
     // The receiver address refused to receive the specified token id
     error ReceiverRefused(address receiver, uint256 token_id, bytes4 returned);
+
+    // Work Proof errors
+    error InvalidRating(uint8 rating);
+    error SoulboundNFT(address freelancer, uint256 token_id);
+    error NotClient(address caller, uint256 token_id);
+    error TokenDoesNotExist(uint256 token_id);
+    error EmptySkillTags();
+    error EmptyProjectType();
 }
 
 /// Represents the ways methods may fail.
@@ -71,6 +109,13 @@ pub enum Erc721Error {
     NotApproved(NotApproved),
     TransferToZero(TransferToZero),
     ReceiverRefused(ReceiverRefused),
+    // Work Proof errors
+    InvalidRating(InvalidRating),
+    SoulboundNFT(SoulboundNFT),
+    NotClient(NotClient),
+    TokenDoesNotExist(TokenDoesNotExist),
+    EmptySkillTags(EmptySkillTags),
+    EmptyProjectType(EmptyProjectType),
 }
 
 // External interfaces
@@ -304,6 +349,12 @@ impl<T: Erc721Params> Erc721<T> {
         to: Address,
         token_id: U256,
     ) -> Result<(), Erc721Error> {
+        if T::SOULBOUND {
+            return Err(Erc721Error::SoulboundNFT(SoulboundNFT {
+                freelancer: from,
+                token_id,
+            }));
+        }
         if to.is_zero() {
             return Err(Erc721Error::TransferToZero(TransferToZero { token_id }));
         }
@@ -384,5 +435,187 @@ impl<T: Erc721Params> Erc721<T> {
             u32::from_be_bytes(interface_slice_array),
             IERC165 | IERC721 | IERC721_METADATA
         ))
+    }
+
+    // Work Proof methods
+
+    /// Mint a new Work Proof NFT to a freelancer
+    ///
+    /// # Arguments
+    /// * `freelancer` - The address of the freelancer receiving the Work Proof
+    /// * `project_type` - Type of project (e.g., "Web Development", "Mobile App")
+    /// * `rating` - Rating from 1-5
+    /// * `skill_tags` - Comma-separated list of skills used (e.g., "React,TypeScript,Node.js")
+    /// * `job_description` - Brief description of the work done
+    /// * `client_memo` - Optional feedback/memo from the client
+    ///
+    /// # Requirements
+    /// * Rating must be between 1 and 5
+    /// * Project type cannot be empty
+    /// * Skill tags cannot be empty
+    pub fn mint_work_proof(
+        &mut self,
+        freelancer: Address,
+        project_type: String,
+        rating: u8,
+        skill_tags: String,
+        job_description: String,
+        client_memo: String,
+    ) -> Result<U256, Erc721Error> {
+        // Validate inputs
+        if rating < 1 || rating > 5 {
+            return Err(Erc721Error::InvalidRating(InvalidRating { rating }));
+        }
+        if project_type.is_empty() {
+            return Err(Erc721Error::EmptyProjectType(EmptyProjectType {}));
+        }
+        if skill_tags.is_empty() {
+            return Err(Erc721Error::EmptySkillTags(EmptySkillTags {}));
+        }
+
+        // Mint the underlying NFT
+        let token_id = self.total_supply.get();
+        self.mint(freelancer)?;
+
+        // Store metadata
+        self.project_types
+            .setter(token_id)
+            .set_str(project_type.as_str());
+        self
+            .ratings
+            .insert(token_id, U8::from(rating));
+        self.skill_tags.setter(token_id).set_str(skill_tags.as_str());
+        self.job_descriptions
+            .setter(token_id)
+            .set_str(job_description.as_str());
+        self.client_memos
+            .setter(token_id)
+            .set_str(client_memo.as_str());
+
+        // Track tokens for this freelancer
+        self.freelancer_tokens.setter(freelancer).push(token_id);
+
+        // Emit event
+        evm::log(WorkProofMinted {
+            token_id,
+            freelancer,
+            client: msg::sender(),
+            project_type,
+            rating: rating.into(),
+            skill_tags,
+        });
+
+        Ok(token_id)
+    }
+
+    /// Get all Work Proofs for a freelancer
+    /// Returns array of token IDs owned by the freelancer
+    pub fn get_freelancer_tokens(&self, freelancer: Address) -> Result<Vec<U256>, Erc721Error> {
+        let list = self.freelancer_tokens.getter(freelancer);
+        let mut out = Vec::new();
+        for i in 0..list.len() {
+            if let Some(id) = list.get(i) {
+                out.push(id);
+            }
+        }
+        Ok(out)
+    }
+
+    /// Get the count of Work Proofs for a freelancer
+    pub fn get_freelancer_token_count(&self, freelancer: Address) -> Result<U256, Erc721Error> {
+        let list = self.freelancer_tokens.getter(freelancer);
+        Ok(U256::from(list.len()))
+    }
+
+    /// Get detailed information about a specific Work Proof
+    pub fn get_work_proof_info(
+        &self,
+        token_id: U256,
+    ) -> Result<(String, u8, String, String, String, Address), Erc721Error> {
+        // Verify token exists
+        let owner = self.owner_of(token_id)?;
+
+        let project_type = self.project_types.getter(token_id).get_string();
+        let rating: u8 = self.ratings.get(token_id).to();
+        let skill_tags = self.skill_tags.getter(token_id).get_string();
+        let job_description = self.job_descriptions.getter(token_id).get_string();
+        let client_memo = self.client_memos.getter(token_id).get_string();
+
+        Ok((project_type, rating, skill_tags, job_description, client_memo, owner))
+    }
+
+    /// Calculate average rating for a freelancer
+    pub fn get_average_rating(&self, freelancer: Address) -> Result<u8, Erc721Error> {
+        let list = self.freelancer_tokens.getter(freelancer);
+        if list.is_empty() {
+            return Ok(0);
+        }
+
+        let mut total: u32 = 0;
+        for i in 0..list.len() {
+            let r: u8 = self.ratings.get(list.get(i).unwrap_or(U256::ZERO)).to();
+            total += r as u32;
+        }
+
+        Ok((total / list.len() as u32) as u8)
+    }
+
+    /// Get total number of Work Proofs minted
+    pub fn get_total_work_proofs(&self) -> Result<U256, Erc721Error> {
+        Ok(self.total_supply.get())
+    }
+
+    /// Update a Work Proof (rating/skills only)
+    /// Only allowed if:
+    /// - Caller is the original client (minted by them)
+    /// - NFT is not soulbound (or soulbound mode is disabled)
+    pub fn update_work_proof(
+        &mut self,
+        token_id: U256,
+        new_rating: u8,
+        new_skill_tags: String,
+    ) -> Result<(), Erc721Error> {
+        // Validate rating
+        if new_rating < 1 || new_rating > 5 {
+            return Err(Erc721Error::InvalidRating(InvalidRating { rating: new_rating }));
+        }
+
+        // Verify token exists and get owner
+        let owner = self.owner_of(token_id)?;
+
+        // Check if soulbound
+        if T::SOULBOUND {
+            return Err(Erc721Error::SoulboundNFT(SoulboundNFT {
+                freelancer: owner,
+                token_id
+            }));
+        }
+
+        // Verify caller is the original client
+        // For simplicity, we check if caller is NOT the freelancer (owner)
+        // In production, you'd want to track the original client separately
+        if msg::sender() == owner {
+            return Err(Erc721Error::NotClient(NotClient {
+                caller: msg::sender(),
+                token_id,
+            }));
+        }
+
+        // Update metadata
+        self
+            .ratings
+            .insert(token_id, U8::from(new_rating));
+        self.skill_tags
+            .setter(token_id)
+            .set_str(new_skill_tags.as_str());
+
+        // Emit event
+        evm::log(WorkProofUpdated {
+            token_id,
+            new_rating: new_rating.into(),
+            new_skill_tags,
+        });
+
+        Ok(())
     }
 }

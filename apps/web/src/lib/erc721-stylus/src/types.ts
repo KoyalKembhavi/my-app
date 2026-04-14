@@ -59,6 +59,51 @@ export interface BalanceInfo {
 }
 
 /**
+ * Work Proof NFT information
+ */
+export interface WorkProofInfo {
+  tokenId: bigint;
+  projectType: string;
+  rating: number; // 1-5
+  skillTags: string[]; // Parsed from comma-separated string
+  jobDescription: string;
+  clientMemo: string;
+  owner: Address;
+}
+
+/**
+ * Freelancer reputation summary
+ */
+export interface FreelancerReputation {
+  address: Address;
+  totalWorkProofs: number;
+  averageRating: number; // 0-5
+  workProofs: WorkProofInfo[];
+  skillCloud: Record<string, number>; // Skill -> count
+}
+
+/**
+ * Work Proof minting parameters
+ */
+export interface MintWorkProofParams {
+  freelancer: Address;
+  projectType: string;
+  rating: number; // 1-5
+  skillTags: string; // Comma-separated
+  jobDescription: string;
+  clientMemo: string;
+}
+
+/**
+ * Work Proof update parameters
+ */
+export interface UpdateWorkProofParams {
+  tokenId: bigint;
+  newRating: number; // 1-5
+  newSkillTags: string; // Comma-separated
+}
+
+/**
  * Transaction state
  */
 export type TransactionState =

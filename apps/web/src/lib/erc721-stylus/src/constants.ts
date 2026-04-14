@@ -299,3 +299,154 @@ export const NFT_FACTORY_ABI = [
     ],
   },
 ] as const;
+
+// Work Proof NFT Contract ABI
+export const WORK_PROOF_ABI = [
+  // Initialization
+  {
+    type: 'function',
+    name: 'initialize',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  // Work Proof specific functions
+  {
+    type: 'function',
+    name: 'mint_work_proof',
+    inputs: [
+      { name: 'freelancer', type: 'address' },
+      { name: 'project_type', type: 'string' },
+      { name: 'rating', type: 'uint8' },
+      { name: 'skill_tags', type: 'string' },
+      { name: 'job_description', type: 'string' },
+      { name: 'client_memo', type: 'string' },
+    ],
+    outputs: [{ name: 'token_id', type: 'uint256' }],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'get_freelancer_tokens',
+    inputs: [{ name: 'freelancer', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256[]' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'get_freelancer_token_count',
+    inputs: [{ name: 'freelancer', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'get_work_proof_info',
+    inputs: [{ name: 'token_id', type: 'uint256' }],
+    outputs: [
+      { name: 'project_type', type: 'string' },
+      { name: 'rating', type: 'uint8' },
+      { name: 'skill_tags', type: 'string' },
+      { name: 'job_description', type: 'string' },
+      { name: 'client_memo', type: 'string' },
+      { name: 'owner', type: 'address' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'get_average_rating',
+    inputs: [{ name: 'freelancer', type: 'address' }],
+    outputs: [{ name: '', type: 'uint8' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'get_total_work_proofs',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'update_work_proof',
+    inputs: [
+      { name: 'token_id', type: 'uint256' },
+      { name: 'new_rating', type: 'uint8' },
+      { name: 'new_skill_tags', type: 'string' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  // ERC721 standard functions (inherited)
+  {
+    type: 'function',
+    name: 'name',
+    inputs: [],
+    outputs: [{ name: '', type: 'string' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'symbol',
+    inputs: [],
+    outputs: [{ name: '', type: 'string' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'balance_of',
+    inputs: [{ name: 'owner', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'owner_of',
+    inputs: [{ name: 'token_id', type: 'uint256' }],
+    outputs: [{ name: '', type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'transfer_from',
+    inputs: [
+      { name: 'from', type: 'address' },
+      { name: 'to', type: 'address' },
+      { name: 'token_id', type: 'uint256' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  // Events
+  {
+    type: 'event',
+    name: 'WorkProofMinted',
+    inputs: [
+      { name: 'token_id', type: 'uint256', indexed: true },
+      { name: 'freelancer', type: 'address', indexed: true },
+      { name: 'client', type: 'address', indexed: true },
+      { name: 'project_type', type: 'string', indexed: false },
+      { name: 'rating', type: 'uint8', indexed: false },
+      { name: 'skill_tags', type: 'string', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'WorkProofUpdated',
+    inputs: [
+      { name: 'token_id', type: 'uint256', indexed: true },
+      { name: 'new_rating', type: 'uint8', indexed: false },
+      { name: 'new_skill_tags', type: 'string', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'Transfer',
+    inputs: [
+      { name: 'from', type: 'address', indexed: true },
+      { name: 'to', type: 'address', indexed: true },
+      { name: 'token_id', type: 'uint256', indexed: true },
+    ],
+  },
+] as const;
